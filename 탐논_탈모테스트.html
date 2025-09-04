@@ -1,0 +1,168 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>ResNet 탈모 진단 테스트</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 2em;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1, h2, h3 {
+            text-align: center;
+        }
+        #preview {
+            max-width: 400px;
+            max-height: 400px;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+        }
+        #result-box {
+            margin-top: 20px;
+            padding: 15px;
+            border: 2px solid;
+            border-radius: 10px;
+        }
+        .label-경증 { border-color: #4CAF50; color: #4CAF50; }
+        .label-양호 { border-color: #8BC34A; color: #8BC34A; }
+        .label-중등도 { border-color: #FFC107; color: #FFC107; }
+        .label-중증 { border-color: #F44336; color: #F44336; }
+    </style>
+</head>
+<body>
+
+    <h1>탈모 분석</h1>
+    <p>이미지를 선택하면 탈모 분석을 시작합니다.</p>
+
+    <input type="file" id="imageInput" accept="image/*">
+    
+    <img id="preview" src="#" alt="이미지 미리보기" style="display:none;">
+    
+    <h2 id="status">상태: 모델 로딩 중...</h2>
+    <div id="result-box" style="display:none;">
+        <h3>결과: <span id="result"></span></h3>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const statusText = document.getElementById('status');
+        const resultText = document.getElementById('result');
+        const resultBox = document.getElementById('result-box');
+
+        const MODEL_PATH = "./resnet18.onnx";
+        const CLASSES = ["경증", "양호", "중등도", "중증"];
+
+        let session;
+
+        // 1. ONNX 런타임 세션 초기화
+        async function initONNX() {
+            try {
+                session = await ort.InferenceSession.create(MODEL_PATH);
+                statusText.textContent = "상태: 분석할 이미지를 선택하세요.";
+            } catch (e) {
+                statusText.textContent = `오류: 모델을 로드할 수 없습니다. ${e}.`;
+                console.error(e);
+            }
+        }
+
+        imageInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            // 이미지 미리보기
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+
+            statusText.textContent = "상태: 이미지 처리 중...";
+            resultBox.style.display = 'none';
+
+
+            // 2. 이미지 전처리
+            const image = new Image();
+            image.src = URL.createObjectURL(file);
+            image.onload = async () => {
+                const tensor = await preprocess(image);
+                
+                // 3. 모델 추론 실행
+                statusText.textContent = "상태: 추론 중...";
+                const output = await runInference(tensor);
+
+                // 4. 결과 표시
+                displayResult(output);
+                statusText.textContent = "상태: 분석 완료! 다른 이미지를 선택하세요.";
+            };
+        });
+
+        async function preprocess(image) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 224;
+            canvas.height = 224;
+            ctx.drawImage(image, 0, 0, 224, 224);
+            
+            const imageData = ctx.getImageData(0, 0, 224, 224);
+            const data = imageData.data;
+            
+            const float32Data = new Float32Array(3 * 224 * 224);
+            
+            // ImageNet 정규화 값
+            const mean = [0.485, 0.456, 0.406];
+            const std = [0.229, 0.224, 0.225];
+
+            for (let i = 0; i < 224 * 224; i++) {
+                float32Data[i]              = (data[i * 4] / 255 - mean[0]) / std[0];      // R
+                float32Data[i + 224 * 224]  = (data[i * 4 + 1] / 255 - mean[1]) / std[1];  // G
+                float32Data[i + 2 * 224 * 224] = (data[i * 4 + 2] / 255 - mean[2]) / std[2]; // B
+            }
+            
+            return new ort.Tensor('float32', float32Data, [1, 3, 224, 224]);
+        }
+
+        async function runInference(tensor) {
+            try {
+                const feeds = { 'input': tensor }; // 'input'은 ONNX 모델의 입력 이름
+                const results = await session.run(feeds);
+                return results.output; // 'output'은 ONNX 모델의 출력 이름
+            } catch (e) {
+                statusText.textContent = `추론 중 오류 발생: ${e}`;
+                console.error(e);
+            }
+        }
+
+        function displayResult(output) {
+            const probabilities = softmax(Array.from(output.data));
+            const maxProb = Math.max(...probabilities);
+            const maxIndex = probabilities.indexOf(maxProb);
+            const predictedClass = CLASSES[maxIndex];
+
+            resultText.textContent = `${predictedClass} (정확도: ${(maxProb * 100).toFixed(2)}%)`;
+            resultBox.className = `label-${predictedClass}`;
+            resultBox.style.display = 'block';
+        }
+
+        function softmax(arr) {
+            const max = Math.max(...arr);
+            const exps = arr.map(x => Math.exp(x - max));
+            const sumExps = exps.reduce((a, b) => a + b);
+            return exps.map(x => x / sumExps);
+        }
+
+        // 페이지 로드 시 모델 초기화
+        initONNX();
+
+    </script>
+</body>
+</html>
