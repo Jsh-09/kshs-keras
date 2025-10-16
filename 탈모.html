@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>탈모 판별 테스트</title>
+    <!-- Tailwind CSS CDN 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 기본 폰트 설정 및 배경 스타일 강화 */
+        body {
+            font-family: "Inter", sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            /* 배경에 약간의 깊이를 더하는 스타일 */
+            background-color: #0a0a0a;
+            background-image: radial-gradient(circle at center, rgba(16, 185, 129, 0.03) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+
+        /* 파일 드래그 영역의 펄스 애니메이션 정의 */
+        @keyframes border-pulse {
+            0% { border-color: #3b82f6; box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+            50% { border-color: #2563eb; box-shadow: 0 0 15px rgba(37, 99, 235, 0.8); }
+            100% { border-color: #3b82f6; box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+        }
+
+        .upload-area-active {
+            animation: border-pulse 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-black text-white antialiased">
+
+    <!-- 메인 컨테이너 (화면 중앙 배치 및 최대 너비 설정) -->
+    <div class="w-full max-w-lg mx-auto p-4 md:p-8 space-y-8">
+
+        <!-- 1. 탈모 판별 테스트 제목 (파란색 테두리 및 네온 효과 강화) -->
+        <header class="text-center">
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight p-6 border-4 border-blue-500 rounded-xl shadow-[0_0_25px_rgba(59,130,246,0.7)] bg-gray-900/50 transition duration-500 hover:shadow-[0_0_40px_rgba(59,130,246,1)]">
+                탈모 판별 테스트
+            </h1>
+        </header>
+
+        <!-- 2. 사진 첨부 공간 -->
+        <section class="bg-gray-900/70 backdrop-blur-sm p-6 sm:p-8 rounded-xl shadow-2xl shadow-blue-900/30 space-y-6 border border-gray-800">
+            <h2 class="text-xl font-semibold text-blue-400">이미지 첨부</h2>
+
+            <!-- 파일 드래그 & 드롭 영역 또는 버튼 -->
+            <label for="photo-upload" id="upload-label" class="flex flex-col items-center justify-center w-full h-48 border-4 border-dashed border-blue-600 rounded-lg cursor-pointer bg-gray-800 hover:bg-gray-700 transition duration-200 upload-area-active">
+                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                    <!-- Upload Icon (SVG) -->
+                    <svg class="w-12 h-12 mb-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.882-7.852A5 5 0 0113 5a5 5 0 013.754 8.747M15 12l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <p class="mb-2 text-md text-gray-300"><span class="font-bold text-blue-300">클릭하거나 파일을 드래그</span>하여 사진을 첨부하세요</p>
+                    <p class="text-xs text-gray-500">정수리 또는 헤어라인 (JPG, PNG | 최대 5MB)</p>
+                    <p id="file-name" class="mt-3 text-sm text-green-400 hidden">선택된 파일: <span id="selected-file-name" class="font-bold"></span></p>
+                </div>
+                <!-- 실제 파일 입력 필드 (숨겨짐) -->
+                <input id="photo-upload" type="file" class="hidden" accept="image/png, image/jpeg" />
+            </label>
+            
+            <p class="text-sm text-gray-500 text-center">정확한 판별을 위해 깨끗한 사진을 사용해 주세요.</p>
+
+        </section>
+
+        <!-- 3. 테스트 시작 버튼 및 스캔 상태 UI -->
+        <div class="pt-4 space-y-4">
+            <button id="start-test-button" class="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-lg rounded-xl transition duration-300 shadow-2xl shadow-blue-500/50 transform hover:scale-[1.02] active:scale-[0.98] disabled:bg-gray-700 disabled:shadow-none disabled:cursor-not-allowed" disabled>
+                테스트 시작하기
+            </button>
+            
+            <!-- 스캔/로딩 상태 UI (미래적인 디자인) -->
+            <div id="scan-status" class="hidden bg-gray-900 p-4 rounded-xl border border-blue-600 space-y-3 shadow-inner shadow-blue-900/50">
+                <p id="status-text" class="text-center font-bold text-blue-400 text-lg animate-pulse">스캔 대기 중...</p>
+                <!-- 프로그레스 바 -->
+                <div class="w-full bg-gray-700 rounded-full h-3">
+                    <div id="progress-bar" class="bg-blue-500 h-3 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-blue-500/50" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Alert Message Box (화면 중앙 상단에 표시) -->
+    <div id="custom-message-box" class="fixed top-[-100px] left-1/2 transform -translate-x-1/2 mt-4 p-4 rounded-lg shadow-xl text-sm font-semibold z-50 transition-all duration-300"></div>
+
+    <!-- JavaScript 로직 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('photo-upload');
+            const startButton = document.getElementById('start-test-button');
+            const fileNameDisplay = document.getElementById('file-name');
+            const selectedFileNameSpan = document.getElementById('selected-file-name');
+            const uploadLabel = document.getElementById('upload-label');
+            
+            // 스캔 UI 요소
+            const scanStatusDiv = document.getElementById('scan-status');
+            const statusText = document.getElementById('status-text');
+            const progressBar = document.getElementById('progress-bar');
+
+            // 파일 선택 이벤트 핸들러
+            fileInput.addEventListener('change', (event) => {
+                const files = event.target.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    selectedFileNameSpan.textContent = file.name;
+                    fileNameDisplay.classList.remove('hidden');
+                    startButton.disabled = false; // 버튼 활성화
+                    startButton.textContent = '테스트 시작하기 (' + file.name + ')';
+                    uploadLabel.classList.remove('upload-area-active'); // 펄스 애니메이션 제거
+                } else {
+                    selectedFileNameSpan.textContent = '';
+                    fileNameDisplay.classList.add('hidden');
+                    startButton.disabled = true; // 버튼 비활성화
+                    startButton.textContent = '테스트 시작하기';
+                    uploadLabel.classList.add('upload-area-active'); // 펄스 애니메이션 추가
+                }
+            });
+
+            // 테스트 시작 버튼 클릭 이벤트 -> 스캔 시뮬레이션 시작
+            startButton.addEventListener('click', () => {
+                if (!startButton.disabled && fileInput.files.length > 0) {
+                    startScanSimulation(fileInput.files[0].name);
+                }
+            });
+            
+            // ** 스캔 시뮬레이션 함수 (간지나는 효과) **
+            function startScanSimulation(fileName) {
+                // UI 초기화 및 시작
+                startButton.disabled = true;
+                startButton.textContent = '분석 데이터 전송 중...';
+                scanStatusDiv.classList.remove('hidden');
+                statusText.textContent = '스캔 시작 중...';
+                statusText.classList.remove('text-green-400');
+                statusText.classList.add('animate-pulse');
+                progressBar.style.width = '0%';
+                
+                // 1단계: 이미지 데이터 전송 (1초)
+                setTimeout(() => {
+                    statusText.textContent = '1단계: 고해상도 이미지 데이터 로딩 (25%)';
+                    progressBar.style.width = '25%';
+                }, 1000);
+
+                // 2단계: AI 모델 분석 중 (2초)
+                setTimeout(() => {
+                    statusText.textContent = '2단계: AI 뉴럴 네트워크 분석 중... (50%)';
+                    progressBar.style.width = '50%';
+                }, 3000);
+
+                // 3단계: 징후 판별 (2초)
+                setTimeout(() => {
+                    statusText.textContent = '3단계: 탈모 진행도 및 징후 판별 (75%)';
+                    progressBar.style.width = '75%';
+                }, 5000);
+
+                // 4단계: 최종 결과 표시 (1초)
+                setTimeout(() => {
+                    progressBar.style.width = '100%';
+                    statusText.textContent = '판별 완료!';
+                    statusText.classList.remove('animate-pulse');
+                    statusText.classList.add('text-green-400'); // 완료 시 녹색으로 변경
+                    
+                    // 결과 메시지 표시
+                    alertMessage("AI 판별이 완료되었습니다! 결과를 확인하세요.", 'blue');
+                    
+                    // UI 복구 (3초 후)
+                    setTimeout(() => {
+                        scanStatusDiv.classList.add('hidden');
+                        startButton.textContent = '테스트 재시작 (' + fileName + ')';
+                        startButton.disabled = false; // 버튼 재활성화
+                    }, 3000);
+                }, 6000);
+            }
+
+            // Custom Alert Message Function (avoiding window.alert)
+            function alertMessage(message, color) {
+                let messageBox = document.getElementById('custom-message-box');
+                
+                messageBox.textContent = message;
+                
+                // Reset classes and set common ones
+                messageBox.className = 'fixed top-[-100px] left-1/2 transform -translate-x-1/2 mt-4 p-4 rounded-lg shadow-xl text-sm font-semibold z-50 transition-all duration-300';
+                
+                if (color === 'blue') {
+                    messageBox.classList.add('bg-blue-600', 'text-white', 'shadow-blue-500/60');
+                } else if (color === 'red') {
+                     messageBox.classList.add('bg-red-600', 'text-white', 'shadow-red-500/60');
+                }
+                
+                // Show message
+                messageBox.style.top = '16px'; 
+
+                setTimeout(() => {
+                    // Hide message
+                    messageBox.style.top = '-100px'; 
+                }, 4000);
+            }
+        });
+    </script>
+
+</body>
+</html>
